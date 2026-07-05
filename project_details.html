@@ -135,7 +135,8 @@
       }
 
       try {
-        const res = await fetch(`/api/projects/${projectId}/upload`, {
+        const assignee = encodeURIComponent(localStorage.getItem('dataset_username') || 'Unknown');
+        const res = await fetch(`/api/projects/${projectId}/upload?assignee=${assignee}`, {
           method: 'POST',
           body: formData
         });

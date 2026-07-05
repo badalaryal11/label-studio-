@@ -77,7 +77,9 @@ class AnnotationServer(SimpleHTTPRequestHandler):
             return
         if path.startswith("/api/projects/") and path.endswith("/upload"):
             project_id = path.split("/")[3]
-            self.handle_project_upload(project_id)
+            query = parse_qs(parsed.query)
+            assignee = query.get('assignee', [None])[0]
+            self.handle_project_upload(project_id, assignee)
             return
 
         if path == "/api/detect":
@@ -192,7 +194,7 @@ class AnnotationServer(SimpleHTTPRequestHandler):
         except Exception as e:
             self.write_json(500, {"error": str(e)})
 
-    def handle_project_upload(self, project_id):
+    def handle_project_upload(self, project_id, assignee=None):
         try:
             content_type = self.headers.get("Content-Type")
             if not content_type or "multipart/form-data" not in content_type:
@@ -219,8 +221,8 @@ class AnnotationServer(SimpleHTTPRequestHandler):
                     with open(filepath, "wb") as f:
                         f.write(part.get_payload(decode=True))
                     
-                    c.execute("INSERT INTO tasks (project_id, image_path, description, status) VALUES (?, ?, ?, ?)", 
-                              (project_id, filepath, filename, 'New'))
+                    c.execute("INSERT INTO tasks (project_id, image_path, description, status, assignee) VALUES (?, ?, ?, ?, ?)", 
+                              (project_id, filepath, filename, 'New', assignee))
                     saved_files.append(filepath)
                     
             conn.commit()
