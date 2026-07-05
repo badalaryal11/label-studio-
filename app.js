@@ -2233,6 +2233,21 @@ document.addEventListener('DOMContentLoaded', () => {
   if (projectId) {
     loadWorkspaceTasks();
   }
+
+const tcModal = document.getElementById('taskCompletedModal');
+const tcClose = document.getElementById('taskCompletedClose');
+const tcOk = document.getElementById('taskCompletedOkBtn');
+
+function closeTaskCompletedModal() {
+  if (tcModal) tcModal.style.display = 'none';
+  if (state.galleryIndex < state.gallery.length - 1) {
+    switchImage(state.galleryIndex + 1);
+  }
+}
+
+if (tcClose) tcClose.addEventListener('click', closeTaskCompletedModal);
+if (tcOk) tcOk.addEventListener('click', closeTaskCompletedModal);
+
 });
 
 // Complete Task Logic
@@ -2262,11 +2277,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         if (res.ok) {
-          alert('Task marked as completed!');
-          // Optionally go to next task
-          if (state.galleryIndex < state.gallery.length - 1) {
-            switchImage(state.galleryIndex + 1);
-          }
+          const tcModal = document.getElementById('taskCompletedModal');
+          if (tcModal) tcModal.style.display = 'flex';
         } else {
           alert('Failed to mark task as completed.');
         }
@@ -2280,3 +2292,18 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 }
 });
+
+
+const tcModal = document.getElementById('taskCompletedModal');
+const tcClose = document.getElementById('taskCompletedClose');
+const tcOk = document.getElementById('taskCompletedOkBtn');
+
+function closeTaskCompletedModal() {
+  if (tcModal) tcModal.style.display = 'none';
+  if (state.galleryIndex < state.gallery.length - 1) {
+    switchImage(state.galleryIndex + 1);
+  }
+}
+
+if (tcClose) tcClose.addEventListener('click', closeTaskCompletedModal);
+if (tcOk) tcOk.addEventListener('click', closeTaskCompletedModal);
