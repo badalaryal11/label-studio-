@@ -47,6 +47,10 @@ class AnnotationServer(SimpleHTTPRequestHandler):
         if path == "/api/projects":
             self.handle_projects_get()
             return
+        if path.startswith("/api/projects/") and path.endswith("/metrics"):
+            project_id = path.split("/")[3]
+            self.handle_project_metrics_get(project_id)
+            return
             
         super().do_GET()
 
@@ -144,6 +148,33 @@ class AnnotationServer(SimpleHTTPRequestHandler):
             projects = [{"id": row[0], "name": row[1], "slug": row[2], "type": row[3], "status": row[4], "creator": row[5], "created_at": row[6]} for row in c.fetchall()]
             conn.close()
             self.write_json(200, projects)
+        except Exception as e:
+            self.write_json(500, {"error": str(e)})
+
+
+    def handle_project_metrics_get(self, project_id):
+        try:
+            conn = sqlite3.connect("workspace.db")
+            c = conn.cursor()
+            
+            c.execute("SELECT COUNT(*) FROM tasks WHERE project_id = ?", (project_id,))
+            total = c.fetchone()[0]
+            
+            c.execute("SELECT COUNT(*) FROM tasks WHERE project_id = ? AND status = 'Completed'", (project_id,))
+            completed = c.fetchone()[0]
+            
+            progress = int((completed / total * 100)) if total > 0 else 0
+            
+            # Update project status if completed
+            if total > 0 and completed == total:
+                c.execute("UPDATE projects SET status = 'Completed' WHERE id = ?", (project_id,))
+                conn.commit()
+            elif completed > 0:
+                c.execute("UPDATE projects SET status = 'In Progress' WHERE id = ?", (project_id,))
+                conn.commit()
+
+            conn.close()
+            self.write_json(200, {"total": total, "completed": completed, "progress": progress})
         except Exception as e:
             self.write_json(500, {"error": str(e)})
 

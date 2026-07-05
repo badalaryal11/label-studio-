@@ -2234,3 +2234,43 @@ document.addEventListener('DOMContentLoaded', () => {
     loadWorkspaceTasks();
   }
 });
+
+// Complete Task Logic
+const completeTaskBtn = document.getElementById('completeTaskBtn');
+if (completeTaskBtn) {
+  completeTaskBtn.addEventListener('click', async () => {
+    if (state.gallery.length === 0) return;
+    const currentTask = state.gallery[state.currentIndex];
+    
+    // Only update if it has an id
+    if (currentTask.id) {
+      try {
+        const username = localStorage.getItem('dataset_username') || 'Unknown';
+        const res = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            id: currentTask.id,
+            status: 'Completed',
+            assignee: username
+          })
+        });
+        
+        if (res.ok) {
+          alert('Task marked as completed!');
+          // Optionally go to next task
+          if (state.currentIndex < state.gallery.length - 1) {
+            switchImage(state.currentIndex + 1);
+          }
+        } else {
+          alert('Failed to mark task as completed.');
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Failed to mark task as completed.');
+      }
+    } else {
+      alert('Cannot complete a task that hasn\'t been saved to the database yet.');
+    }
+  });
+}
