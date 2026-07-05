@@ -2240,11 +2240,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const completeTaskBtn = document.getElementById('completeTaskBtn');
   if (completeTaskBtn) {
     completeTaskBtn.addEventListener('click', async () => {
+      console.log("Complete Task button clicked!");
       if (state.gallery.length === 0) {
         alert("No image to complete!");
         return;
       }
-      const currentTask = state.gallery[state.currentIndex];
+      const currentTask = state.gallery[state.galleryIndex];
       
       // Only update if it has an id
       if (currentTask.id) {
@@ -2263,8 +2264,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (res.ok) {
           alert('Task marked as completed!');
           // Optionally go to next task
-          if (state.currentIndex < state.gallery.length - 1) {
-            switchImage(state.currentIndex + 1);
+          if (state.galleryIndex < state.gallery.length - 1) {
+            switchImage(state.galleryIndex + 1);
           }
         } else {
           alert('Failed to mark task as completed.');
