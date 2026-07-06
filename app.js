@@ -2270,7 +2270,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (res.ok) {
           const tcModal = document.getElementById('taskCompletedModal');
-          if (tcModal) tcModal.style.display = 'flex';
+          if (tcModal) tcModal.classList.add('is-active');
         } else {
           alert('Failed to mark task as completed.');
         }
@@ -2279,7 +2279,9 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Failed to mark task as completed.');
       }
     } else {
-      alert('Cannot complete a task that hasn\'t been saved to the database yet.');
+      // For local tasks, simply show the completion modal so they can continue
+      const tcModal = document.getElementById('taskCompletedModal');
+      if (tcModal) tcModal.classList.add('is-active');
     }
   });
 }
@@ -2291,7 +2293,7 @@ const tcClose = document.getElementById('taskCompletedClose');
 const tcOk = document.getElementById('taskCompletedOkBtn');
 
 function closeTaskCompletedModal() {
-  if (tcModal) tcModal.style.display = 'none';
+  if (tcModal) tcModal.classList.remove('is-active');
   if (state.galleryIndex < state.gallery.length - 1) {
     switchImage(state.galleryIndex + 1);
   }

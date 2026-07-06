@@ -212,10 +212,17 @@ class AnnotationServer(SimpleHTTPRequestHandler):
             conn = sqlite3.connect("workspace.db")
             c = conn.cursor()
             
+            # Allowed image extensions
+            ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+            
             for part in msg.walk():
                 filename = part.get_filename()
                 if filename:
-                    ext = os.path.splitext(filename)[1]
+                    ext = os.path.splitext(filename)[1].lower()
+                    if ext not in ALLOWED_EXTENSIONS:
+                        self.write_json(400, {"error": f"File type {ext} is not allowed. Only images are supported."})
+                        return
+                        
                     new_filename = f"{uuid.uuid4().hex}{ext}"
                     filepath = os.path.join("uploads", new_filename)
                     with open(filepath, "wb") as f:
@@ -398,7 +405,44 @@ def init_db():
     conn = sqlite3.connect("workspace.db")
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS workspace_data (key TEXT PRIMARY KEY, value TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT, assignee TEXT)''')
+    
+    # Create projects table
+    c.execute('''CREATE TABLE IF NOT EXISTS projects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        name TEXT, 
+        slug TEXT, 
+        type TEXT, 
+        status TEXT, 
+        creator TEXT, 
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # Create tasks table with full schema
+    c.execute('''CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        project_id INTEGER,
+        image_path TEXT,
+        description TEXT, 
+        status TEXT,
+        assignee TEXT
+    )''')
+    
+    # Migration for existing DB: safely try to add missing columns to tasks table
+    try:
+        c.execute("ALTER TABLE tasks ADD COLUMN project_id INTEGER")
+    except sqlite3.OperationalError:
+        pass # Column already exists
+        
+    try:
+        c.execute("ALTER TABLE tasks ADD COLUMN image_path TEXT")
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        c.execute("ALTER TABLE tasks ADD COLUMN status TEXT")
+    except sqlite3.OperationalError:
+        pass
+        
     c.execute('''CREATE TABLE IF NOT EXISTS team_members (name TEXT PRIMARY KEY, time_logged INTEGER)''')
     conn.commit()
     conn.close()
