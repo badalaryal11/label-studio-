@@ -443,7 +443,7 @@ canvas {
 
 .details-bar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 10px;
   padding: 12px 14px;
 }
@@ -471,23 +471,40 @@ canvas {
   }
 
   .workspace {
-    min-height: 680px;
-  }
-
-  .toolbar,
-  .details-bar {
-    align-items: stretch;
-    grid-template-columns: 1fr;
+    min-height: auto;
   }
 
   .toolbar {
+    align-items: stretch;
     flex-direction: column;
+  }
+
+  .stage-wrap {
+    min-height: 300px;
+  }
+
+  canvas {
+    min-height: 300px;
   }
 
   .tool-group,
   .tool-button,
   .icon-button {
     width: 100%;
+  }
+
+  .brand-block {
+    flex-direction: column;
+  }
+
+  .split-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-header h2 {
+    font-size: 1rem;
   }
 }
 
@@ -615,6 +632,8 @@ canvas {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 30px;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .dashboard-header h1 {

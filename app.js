@@ -336,8 +336,8 @@ function loadSaved() {
 function resizeCanvas() {
   const rect = stageWrap.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
-  canvas.width = Math.max(640, Math.floor(rect.width * ratio));
-  canvas.height = Math.max(420, Math.floor(rect.height * ratio));
+  canvas.width = Math.floor(rect.width * ratio);
+  canvas.height = Math.floor(rect.height * ratio);
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   draw();
 }

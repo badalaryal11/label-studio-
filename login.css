@@ -184,3 +184,14 @@ body::before {
 .is-loading .btn-text {
   display: none;
 }
+
+@media (max-width: 480px) {
+  .login-container {
+    padding: 24px;
+    width: 90%;
+  }
+
+  .brand-header h1 {
+    font-size: 1.5rem;
+  }
+}
