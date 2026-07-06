@@ -3,13 +3,17 @@ import os
 import sqlite3
 import uuid
 from typing import Optional, List, Dict, Any
+import datetime
 
-from fastapi import FastAPI, UploadFile, File, Form, Query, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, Form, Query, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+import models
+from database import engine, get_db, Base
 from label_studio_sdk import LabelStudio
 from detector import DetectionClientError, detect_objects
 
@@ -17,6 +21,9 @@ HOST = "127.0.0.1"
 PORT = int(os.environ.get("APP_PORT", "8765"))
 LABEL_STUDIO_URL = os.environ.get("LABEL_STUDIO_URL", "http://localhost:8000/")
 LABEL_STUDIO_API_KEY = os.environ.get("LABEL_STUDIO_API_KEY", "")
+
+# Create tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
@@ -33,7 +40,7 @@ class WorkspaceData(BaseModel):
     key: str
     value: str
 
-class Project(BaseModel):
+class ProjectModel(BaseModel):
     name: str
     slug: str
     type: str = "Image - Polygon"
@@ -55,7 +62,7 @@ class BulkUpdate(BaseModel):
     assignee: Optional[str] = None
     status: Optional[str] = None
 
-class TeamMember(BaseModel):
+class TeamMemberModel(BaseModel):
     name: str
 
 class TeamTime(BaseModel):
@@ -72,123 +79,59 @@ class LabelStudioPayload(BaseModel):
     taskData: Optional[dict] = None
     result: Optional[list] = None
 
-# --- Database ---
-
-def init_db():
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS workspace_data (key TEXT PRIMARY KEY, value TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS projects (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        name TEXT, 
-        slug TEXT, 
-        type TEXT, 
-        status TEXT, 
-        creator TEXT, 
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        project_id INTEGER,
-        image_path TEXT,
-        description TEXT, 
-        status TEXT,
-        assignee TEXT,
-        time_spent INTEGER DEFAULT 0,
-        updated_at DATETIME,
-        annotations TEXT
-    )''')
-    
-    # Migrations (safely ignore if exists)
-    for col in [
-        "ALTER TABLE tasks ADD COLUMN project_id INTEGER",
-        "ALTER TABLE tasks ADD COLUMN image_path TEXT",
-        "ALTER TABLE tasks ADD COLUMN status TEXT",
-        "ALTER TABLE tasks ADD COLUMN time_spent INTEGER DEFAULT 0",
-        "ALTER TABLE tasks ADD COLUMN updated_at DATETIME",
-        "ALTER TABLE tasks ADD COLUMN annotations TEXT"
-    ]:
-        try:
-            c.execute(col)
-        except sqlite3.OperationalError:
-            pass
-
-    c.execute('''CREATE TABLE IF NOT EXISTS team_members (name TEXT PRIMARY KEY, time_logged INTEGER)''')
-    conn.commit()
-    conn.close()
-
-init_db()
-
 # --- API Endpoints ---
 
 @app.get("/api/data")
-def get_data():
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute("SELECT key, value FROM workspace_data")
-    rows = c.fetchall()
-    conn.close()
-    return {row[0]: row[1] for row in rows}
+def get_data(db: Session = Depends(get_db)):
+    rows = db.query(models.WorkspaceData).all()
+    return {row.key: row.value for row in rows}
 
 @app.post("/api/data")
-def set_data(data: WorkspaceData):
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO workspace_data (key, value) VALUES (?, ?)", (data.key, data.value))
-    conn.commit()
-    conn.close()
+def set_data(data: WorkspaceData, db: Session = Depends(get_db)):
+    item = db.query(models.WorkspaceData).filter(models.WorkspaceData.key == data.key).first()
+    if item:
+        item.value = data.value
+    else:
+        item = models.WorkspaceData(key=data.key, value=data.value)
+        db.add(item)
+    db.commit()
     return {"status": "ok"}
 
 @app.get("/api/projects")
-def get_projects():
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute("SELECT id, name, slug, type, status, creator, created_at FROM projects")
-    projects = [{"id": row[0], "name": row[1], "slug": row[2], "type": row[3], "status": row[4], "creator": row[5], "created_at": row[6]} for row in c.fetchall()]
-    conn.close()
-    return projects
+def get_projects(db: Session = Depends(get_db)):
+    projects = db.query(models.Project).all()
+    return [{"id": p.id, "name": p.name, "slug": p.slug, "type": p.type, "status": p.status, "creator": p.creator, "created_at": p.created_at} for p in projects]
 
 @app.get("/api/projects/{project_id}/metrics")
-def get_project_metrics(project_id: int):
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM tasks WHERE project_id = ?", (project_id,))
-    total = c.fetchone()[0]
-    
-    c.execute("SELECT COUNT(*) FROM tasks WHERE project_id = ? AND status = 'Completed'", (project_id,))
-    completed = c.fetchone()[0]
+def get_project_metrics(project_id: int, db: Session = Depends(get_db)):
+    total = db.query(models.Task).filter(models.Task.project_id == project_id).count()
+    completed = db.query(models.Task).filter(models.Task.project_id == project_id, models.Task.status == 'Completed').count()
     
     progress = int((completed / total * 100)) if total > 0 else 0
     
-    if total > 0 and completed == total:
-        c.execute("UPDATE projects SET status = 'Completed' WHERE id = ?", (project_id,))
-        conn.commit()
-    elif completed > 0:
-        c.execute("UPDATE projects SET status = 'In Progress' WHERE id = ?", (project_id,))
-        conn.commit()
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if project:
+        if total > 0 and completed == total:
+            project.status = 'Completed'
+            db.commit()
+        elif completed > 0:
+            project.status = 'In Progress'
+            db.commit()
 
-    conn.close()
     return {"total": total, "completed": completed, "progress": progress}
 
 @app.post("/api/projects")
-def create_project(project: Project):
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute("INSERT INTO projects (name, slug, type, status, creator) VALUES (?, ?, ?, ?, ?)", 
-              (project.name, project.slug, project.type, "Preparing", project.creator))
-    project_id = c.lastrowid
-    conn.commit()
-    conn.close()
-    return {"id": project_id, "status": "ok"}
+def create_project(project: ProjectModel, db: Session = Depends(get_db)):
+    db_project = models.Project(name=project.name, slug=project.slug, type=project.type, status="Preparing", creator=project.creator)
+    db.add(db_project)
+    db.commit()
+    db.refresh(db_project)
+    return {"id": db_project.id, "status": "ok"}
 
 @app.post("/api/projects/{project_id}/upload")
-def upload_files(project_id: int, assignee: Optional[str] = Query(None), file: List[UploadFile] = File(...)):
+def upload_files(project_id: int, assignee: Optional[str] = Query(None), file: List[UploadFile] = File(...), db: Session = Depends(get_db)):
     os.makedirs("uploads", exist_ok=True)
     saved_files = []
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
     
     ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
     
@@ -203,127 +146,132 @@ def upload_files(project_id: int, assignee: Optional[str] = Query(None), file: L
         with open(filepath, "wb") as out_file:
             out_file.write(f.file.read())
             
-        c.execute("INSERT INTO tasks (project_id, image_path, description, status, assignee) VALUES (?, ?, ?, ?, ?)", 
-                  (project_id, filepath, f.filename, 'New', assignee))
+        task = models.Task(project_id=project_id, image_path=filepath, description=f.filename, status='New', assignee=assignee)
+        db.add(task)
         saved_files.append(filepath)
         
-    conn.commit()
-    conn.close()
+    db.commit()
     return {"status": "ok", "files": saved_files}
 
 @app.get("/api/tasks")
-def get_tasks(projectId: Optional[int] = Query(None)):
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
+def get_tasks(projectId: Optional[int] = Query(None), db: Session = Depends(get_db)):
     if projectId:
-        c.execute("SELECT id, description, assignee, image_path, status, time_spent, updated_at, annotations FROM tasks WHERE project_id = ?", (projectId,))
+        tasks = db.query(models.Task).filter(models.Task.project_id == projectId).all()
     else:
-        c.execute("SELECT id, description, assignee, image_path, status, time_spent, updated_at, annotations FROM tasks")
+        tasks = db.query(models.Task).all()
     
-    tasks = []
-    for row in c.fetchall():
+    result = []
+    for t in tasks:
         annotations_data = []
-        if row[7]:
+        if t.annotations:
             try:
-                annotations_data = json.loads(row[7])
+                annotations_data = json.loads(t.annotations)
             except:
                 pass
-        tasks.append({
-            "id": row[0], "description": row[1], "assignee": row[2], 
-            "image_path": row[3], "status": row[4], "time_spent": row[5], 
-            "updated_at": row[6], "annotations": annotations_data
+        result.append({
+            "id": t.id, "description": t.description, "assignee": t.assignee, 
+            "image_path": t.image_path, "status": t.status, "time_spent": t.time_spent, 
+            "updated_at": t.updated_at, "annotations": annotations_data
         })
-    conn.close()
-    return tasks
+    return result
 
 @app.post("/api/tasks")
-def update_or_create_task(task: TaskUpdate, projectId: Optional[int] = Query(None)):
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
+def update_or_create_task(task: TaskUpdate, projectId: Optional[int] = Query(None), db: Session = Depends(get_db)):
     if task.id:
-        c.execute("UPDATE tasks SET assignee = ?, status = ?, description = COALESCE(?, description), time_spent = COALESCE(time_spent, 0) + ?, annotations = COALESCE(?, annotations), updated_at = CURRENT_TIMESTAMP WHERE id = ?", 
-                  (task.assignee, task.status, task.description, task.time_spent_delta, task.annotations, task.id))
-        task_id = task.id
+        db_task = db.query(models.Task).filter(models.Task.id == task.id).first()
+        if db_task:
+            if task.assignee is not None:
+                db_task.assignee = task.assignee
+            if task.status is not None:
+                db_task.status = task.status
+            if task.description is not None:
+                db_task.description = task.description
+            if task.time_spent_delta is not None:
+                db_task.time_spent = (db_task.time_spent or 0) + task.time_spent_delta
+            if task.annotations is not None:
+                db_task.annotations = task.annotations
+            db_task.updated_at = datetime.datetime.utcnow()
+            task_id = db_task.id
+        else:
+            raise HTTPException(status_code=404, detail="Task not found")
     else:
-        c.execute("INSERT INTO tasks (description, assignee, project_id, status, time_spent, annotations, updated_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", 
-                  (task.description, task.assignee, projectId, task.status, task.time_spent_delta, task.annotations))
-        task_id = c.lastrowid
-    conn.commit()
-    conn.close()
+        db_task = models.Task(
+            description=task.description, 
+            assignee=task.assignee, 
+            project_id=projectId, 
+            status=task.status or "New", 
+            time_spent=task.time_spent_delta or 0, 
+            annotations=task.annotations,
+            updated_at=datetime.datetime.utcnow()
+        )
+        db.add(db_task)
+        db.commit()
+        db.refresh(db_task)
+        task_id = db_task.id
+        
+    db.commit()
     return {"id": task_id, "status": "ok"}
 
 @app.delete("/api/tasks/{task_id}")
-def delete_task(task_id: int):
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-    conn.commit()
-    conn.close()
+def delete_task(task_id: int, db: Session = Depends(get_db)):
+    db.query(models.Task).filter(models.Task.id == task_id).delete()
+    db.commit()
     return {"status": "ok"}
 
 @app.post("/api/tasks/bulk-delete")
-def bulk_delete_tasks(payload: BulkDelete):
+def bulk_delete_tasks(payload: BulkDelete, db: Session = Depends(get_db)):
     if not payload.ids:
         raise HTTPException(status_code=400, detail="No ids provided")
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute(f"DELETE FROM tasks WHERE id IN ({','.join('?' * len(payload.ids))})", tuple(payload.ids))
-    conn.commit()
-    conn.close()
+    db.query(models.Task).filter(models.Task.id.in_(payload.ids)).delete(synchronize_session=False)
+    db.commit()
     return {"status": "ok"}
 
 @app.post("/api/tasks/bulk-update")
-def bulk_update_tasks(payload: BulkUpdate):
+def bulk_update_tasks(payload: BulkUpdate, db: Session = Depends(get_db)):
     if not payload.ids:
         raise HTTPException(status_code=400, detail="No ids provided")
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    if payload.assignee is not None and payload.status is not None:
-        c.execute(f"UPDATE tasks SET assignee = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN ({','.join('?' * len(payload.ids))})", (payload.assignee, payload.status, *payload.ids))
-    elif payload.assignee is not None:
-        c.execute(f"UPDATE tasks SET assignee = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN ({','.join('?' * len(payload.ids))})", (payload.assignee, *payload.ids))
-    elif payload.status is not None:
-        c.execute(f"UPDATE tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN ({','.join('?' * len(payload.ids))})", (payload.status, *payload.ids))
-    conn.commit()
-    conn.close()
+    
+    update_data = {}
+    if payload.assignee is not None:
+        update_data[models.Task.assignee] = payload.assignee
+    if payload.status is not None:
+        update_data[models.Task.status] = payload.status
+        
+    if update_data:
+        update_data[models.Task.updated_at] = datetime.datetime.utcnow()
+        db.query(models.Task).filter(models.Task.id.in_(payload.ids)).update(update_data, synchronize_session=False)
+        db.commit()
+        
     return {"status": "ok"}
 
 @app.get("/api/team")
-def get_team():
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute("SELECT name, time_logged FROM team_members")
-    team = [{"name": row[0], "time_logged": row[1]} for row in c.fetchall()]
-    conn.close()
-    return team
+def get_team(db: Session = Depends(get_db)):
+    team = db.query(models.TeamMember).all()
+    return [{"name": t.name, "time_logged": t.time_logged} for t in team]
 
 @app.post("/api/team")
-def create_team_member(member: TeamMember):
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO team_members (name, time_logged) VALUES (?, 0)", (member.name,))
-    conn.commit()
-    conn.close()
+def create_team_member(member: TeamMemberModel, db: Session = Depends(get_db)):
+    existing = db.query(models.TeamMember).filter(models.TeamMember.name == member.name).first()
+    if not existing:
+        new_member = models.TeamMember(name=member.name, time_logged=0)
+        db.add(new_member)
+        db.commit()
     return {"status": "ok"}
 
 @app.delete("/api/team/{name}")
-def delete_team_member(name: str):
+def delete_team_member(name: str, db: Session = Depends(get_db)):
     import urllib.parse
     name = urllib.parse.unquote(name)
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute("DELETE FROM team_members WHERE name = ?", (name,))
-    conn.commit()
-    conn.close()
+    db.query(models.TeamMember).filter(models.TeamMember.name == name).delete()
+    db.commit()
     return {"status": "ok"}
 
 @app.post("/api/team/time")
-def update_team_time(payload: TeamTime):
-    conn = sqlite3.connect("workspace.db")
-    c = conn.cursor()
-    c.execute("UPDATE team_members SET time_logged = ? WHERE name = ?", (payload.time_logged, payload.name))
-    conn.commit()
-    conn.close()
+def update_team_time(payload: TeamTime, db: Session = Depends(get_db)):
+    member = db.query(models.TeamMember).filter(models.TeamMember.name == payload.name).first()
+    if member:
+        member.time_logged = payload.time_logged
+        db.commit()
     return {"status": "ok"}
 
 @app.post("/api/detect")
