@@ -163,7 +163,10 @@ function setLabelStudioBusy(isBusy) {
 function setDetectionBusy(isBusy) {
   detectionBusy = isBusy;
   autoDetectButton.disabled = isBusy || !imageLoaded;
-  autoDetectButton.textContent = isBusy ? "Detecting..." : "Detect";
+  const labelSpan = autoDetectButton.querySelector(".btn-label");
+  if (labelSpan) {
+    labelSpan.textContent = isBusy ? "Detecting..." : "Detect";
+  }
 }
 
 async function autoDetectObjects({ replace = true } = {}) {
@@ -714,7 +717,10 @@ function renderControls() {
     ? "Select a class, then draw a polygon."
     : "Select a class, then draw a bounding box.";
   autoDetectButton.disabled = detectionBusy || !imageLoaded;
-  autoDetectButton.textContent = detectionBusy ? "Detecting..." : "Detect";
+  const labelSpan = autoDetectButton.querySelector(".btn-label");
+  if (labelSpan) {
+    labelSpan.textContent = detectionBusy ? "Detecting..." : "Detect";
+  }
   autoDetectButton.title = selectedAnnotation() ? "Detect objects inside the selected area" : "Detect objects in the whole image";
   undoButton.disabled = state.history.length === 0;
   deleteButton.disabled = !state.selectedId;

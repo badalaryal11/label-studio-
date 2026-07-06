@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Image Annotation MVP</title>
   <link rel="icon" type="image/png" href="logo.png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2">
   <script src="sync.js"></script>
   <script>
     window.addEventListener('error', function(e) {
@@ -19,6 +19,10 @@
 </head>
 
 <body>
+  <!-- Mobile sidebar toggle -->
+  <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Toggle sidebar">☰</button>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
   <main class="app-shell">
     <aside class="sidebar" aria-label="Annotation workspace controls">
       <section class="brand-block" style="flex-direction: column; align-items: stretch; gap: 16px;">
@@ -226,14 +230,14 @@
     <section class="workspace" aria-label="Image annotation canvas">
       <header class="toolbar">
 
-        <div class="tool-group" style="margin-left: auto;">
-          <button class="primary" id="completeTaskBtn" type="button" style="padding: 8px 16px; border-radius: 6px; font-weight: 600;">
-            ✅ Mark as Completed
+        <div class="tool-group">
+          <button class="primary" id="completeTaskBtn" type="button" title="Mark as Completed" style="padding: 8px 12px; border-radius: 6px; font-weight: 600;">
+            <span class="btn-icon">✅</span><span class="btn-label"> Mark as Completed</span>
           </button>
         </div>
         <div class="tool-group" role="group" aria-label="Annotation mode">
-          <button class="tool-button is-active" id="drawMode" type="button">Draw</button>
-          <button class="tool-button" id="selectMode" type="button">Select</button>
+          <button class="tool-button is-active" id="drawMode" type="button" title="Draw"><span class="btn-icon">✏️</span><span class="btn-label">Draw</span></button>
+          <button class="tool-button" id="selectMode" type="button" title="Select"><span class="btn-icon">👆</span><span class="btn-label">Select</span></button>
         </div>
         <div class="tool-group" role="group" aria-label="Session Timer" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px 8px; border-radius: 12px; background: #fff; color: #333; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
           <span id="sessionTimerDisplay" style="font-family: 'Courier New', Courier, monospace; font-size: 1rem; font-weight: 800; color: #0f172a; text-align: center; letter-spacing: 1px; line-height: 1;">00:00:00</span>
@@ -250,26 +254,25 @@
           </div>
         </div>
         <div class="tool-group" role="group" aria-label="Shape mode">
-          <button class="tool-button is-active" id="boxMode" type="button">Bounding box</button>
-          <button class="tool-button" id="polygonMode" type="button">Polygon</button>
+          <button class="tool-button is-active" id="boxMode" type="button" title="Bounding box"><span class="btn-icon">▭</span><span class="btn-label">Bbox</span></button>
+          <button class="tool-button" id="polygonMode" type="button" title="Polygon"><span class="btn-icon">⬡</span><span class="btn-label">Polygon</span></button>
         </div>
         <div class="tool-group" role="group" aria-label="Canvas controls">
-          <button class="tool-button primary" id="autoDetectButton" type="button"
-            title="Detect objects with AI">Detect</button>
-          <button class="icon-button" id="undoButton" type="button" title="Undo">Undo</button>
-          <button class="icon-button" id="deleteButton" type="button" title="Delete selected">Delete</button>
-          <button class="icon-button" id="clearButton" type="button" title="Clear all annotations">Clear</button>
+          <button class="tool-button primary" id="autoDetectButton" type="button" title="Detect objects with AI"><span class="btn-icon">🔍</span><span class="btn-label">Detect</span></button>
+          <button class="icon-button" id="undoButton" type="button" title="Undo"><span class="btn-icon">↩</span><span class="btn-label">Undo</span></button>
+          <button class="icon-button" id="deleteButton" type="button" title="Delete selected"><span class="btn-icon">🗑</span><span class="btn-label">Delete</span></button>
+          <button class="icon-button" id="clearButton" type="button" title="Clear all annotations"><span class="btn-icon">✕</span><span class="btn-label">Clear</span></button>
         </div>
         <div class="tool-group" role="group" aria-label="Data controls">
           <div class="dropdown">
-            <button class="icon-button" id="importMenuButton" type="button" title="Import Data">Import ▾</button>
+            <button class="icon-button" id="importMenuButton" type="button" title="Import Data"><span class="btn-icon">📥</span><span class="btn-label">Import</span> ▾</button>
             <div class="dropdown-content" id="importDropdown">
               <button type="button" id="importJsonButton">JSON</button>
               <button type="button" id="importCsvButton">CSV</button>
             </div>
           </div>
           <div class="dropdown">
-            <button class="icon-button primary" id="exportMenuButton" type="button" title="Export Data">Export
+            <button class="icon-button primary" id="exportMenuButton" type="button" title="Export Data"><span class="btn-icon">📤</span><span class="btn-label">Export</span>
               ▾</button>
             <div class="dropdown-content" id="exportDropdown">
               <button type="button" id="exportJsonButton">JSON</button>
@@ -541,6 +544,35 @@
         item.classList.toggle('is-active');
       });
     });
+
+    // Mobile sidebar toggle
+    (function() {
+      const toggle = document.getElementById('sidebarToggle');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      const sidebar = document.querySelector('.sidebar');
+      if (!toggle || !backdrop || !sidebar) return;
+
+      function openSidebar() {
+        sidebar.classList.add('is-open');
+        backdrop.classList.add('is-open');
+        toggle.textContent = '✕';
+      }
+      function closeSidebar() {
+        sidebar.classList.remove('is-open');
+        backdrop.classList.remove('is-open');
+        toggle.textContent = '☰';
+      }
+
+      toggle.addEventListener('click', () => {
+        sidebar.classList.contains('is-open') ? closeSidebar() : openSidebar();
+      });
+      backdrop.addEventListener('click', closeSidebar);
+
+      // Close sidebar when window resizes above breakpoint
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 860) closeSidebar();
+      });
+    })();
   </script>
   
   <!-- All Projects Modal -->

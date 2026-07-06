@@ -185,13 +185,75 @@ body::before {
   display: none;
 }
 
-@media (max-width: 480px) {
+/* Tablet */
+@media (max-width: 768px) {
   .login-container {
-    padding: 24px;
-    width: 90%;
+    max-width: 380px;
+    padding: 32px;
+  }
+}
+
+/* Large phone */
+@media (max-width: 480px) {
+  body {
+    padding: 16px;
+  }
+
+  .login-container {
+    max-width: 100%;
+    padding: 24px 20px;
+    border-radius: 18px;
+  }
+
+  .brand-header {
+    margin-bottom: 24px;
+  }
+
+  .brand-header img {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
   }
 
   .brand-header h1 {
-    font-size: 1.5rem;
+    font-size: 1.45rem;
+  }
+
+  .brand-header p {
+    font-size: 0.85rem;
+  }
+
+  .login-form {
+    gap: 16px;
+  }
+
+  .input-group input {
+    padding: 12px 14px;
+    font-size: 0.95rem;
+  }
+
+  .submit-btn {
+    padding: 14px;
+    font-size: 0.95rem;
+  }
+}
+
+/* Small phone */
+@media (max-width: 360px) {
+  body {
+    padding: 10px;
+  }
+
+  .login-container {
+    padding: 20px 16px;
+    border-radius: 14px;
+  }
+
+  .brand-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .input-group label {
+    font-size: 0.78rem;
   }
 }
