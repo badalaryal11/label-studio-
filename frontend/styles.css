@@ -369,21 +369,21 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px;
+  gap: 8px;
+  padding: 8px 10px;
   flex-wrap: wrap;
 }
 
 .tool-group {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
 .tool-button,
 .icon-button {
-  min-width: 74px;
-  padding: 0 12px;
+  min-width: unset;
+  padding: 0 8px;
 }
 
 .btn-icon {
