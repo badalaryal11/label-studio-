@@ -47,6 +47,12 @@ const galleryPosition = document.querySelector("#galleryPosition");
 const clearGalleryButton = document.querySelector("#clearGalleryButton");
 const logoutBtnApp = document.querySelector("#logoutBtnApp");
 
+const commentOverlay = document.querySelector("#commentOverlay");
+const commentOverlayInput = document.querySelector("#commentOverlayInput");
+const commentOverlaySave = document.querySelector("#commentOverlaySave");
+const commentOverlayCancel = document.querySelector("#commentOverlayCancel");
+let pendingCommentPoint = null;
+
 const storageKey = "image-annotation-mvp-v1";
 const labelStudioStorageKey = "image-annotation-label-studio-settings";
 const handleSize = 9;
@@ -344,6 +350,10 @@ function resizeCanvas() {
   canvas.width = Math.floor(rect.width * ratio);
   canvas.height = Math.floor(rect.height * ratio);
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  if (pendingCommentPoint) {
+    pendingCommentPoint = null;
+    commentOverlay.classList.add("is-hidden");
+  }
   draw();
 }
 
@@ -379,6 +389,20 @@ function draw() {
 
   if (drag?.draft) {
     drawAnnotation(drag.draft, true);
+  }
+
+  if (pendingCommentPoint) {
+    const screenX = imageBox.x + pendingCommentPoint.x * imageBox.scale;
+    const screenY = imageBox.y + pendingCommentPoint.y * imageBox.scale;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, 8, 0, Math.PI * 2);
+    ctx.fillStyle = "#f4a261";
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
   }
 
   // Draw close-point indicator and preview line for active polygon drawing
@@ -774,6 +798,7 @@ function renderControls() {
 if (logoutBtnApp) {
   logoutBtnApp.addEventListener("click", () => {
     localStorage.removeItem("dataset_username");
+    localStorage.removeItem("image-annotation-mvp-v1");
     window.location.href = "index.html";
   });
 }
@@ -1432,6 +1457,47 @@ commentMode.addEventListener("click", () => {
   render();
 });
 
+commentOverlaySave.addEventListener("click", () => {
+  const text = commentOverlayInput.value;
+  if (text && text.trim() !== "" && pendingCommentPoint) {
+    snapshot();
+    const annotation = {
+      id: crypto.randomUUID(),
+      type: "comment",
+      text: text.trim(),
+      author: localStorage.getItem('dataset_username') || "Unknown",
+      x: round(pendingCommentPoint.x),
+      y: round(pendingCommentPoint.y),
+      width: 20,
+      height: 20,
+      points: [
+        { x: pendingCommentPoint.x - 10, y: pendingCommentPoint.y - 10 },
+        { x: pendingCommentPoint.x + 10, y: pendingCommentPoint.y - 10 },
+        { x: pendingCommentPoint.x + 10, y: pendingCommentPoint.y + 10 },
+        { x: pendingCommentPoint.x - 10, y: pendingCommentPoint.y + 10 }
+      ]
+    };
+    state.annotations.push(annotation);
+    state.selectedId = annotation.id;
+    pendingCommentPoint = null;
+    commentOverlay.classList.add("is-hidden");
+    render();
+    save();
+    setStatus("Comment added");
+  } else if (!text || text.trim() === "") {
+    // If empty, treat as cancel
+    pendingCommentPoint = null;
+    commentOverlay.classList.add("is-hidden");
+    render();
+  }
+});
+
+commentOverlayCancel.addEventListener("click", () => {
+  pendingCommentPoint = null;
+  commentOverlay.classList.add("is-hidden");
+  render();
+});
+
 undoButton.addEventListener("click", () => {
   const previous = state.history.pop();
   if (!previous) return;
@@ -1607,31 +1673,19 @@ canvas.addEventListener("pointerdown", (event) => {
     const pointInImage = imagePoint(point);
     
     if (state.shape === "comment") {
-      const text = prompt("Enter your comment:");
-      if (text && text.trim() !== "") {
-        snapshot();
-        const annotation = {
-          id: crypto.randomUUID(),
-          type: "comment",
-          text: text.trim(),
-          author: localStorage.getItem('dataset_username') || "Unknown",
-          x: round(pointInImage.x),
-          y: round(pointInImage.y),
-          width: 20,
-          height: 20,
-          points: [
-            { x: pointInImage.x - 10, y: pointInImage.y - 10 },
-            { x: pointInImage.x + 10, y: pointInImage.y - 10 },
-            { x: pointInImage.x + 10, y: pointInImage.y + 10 },
-            { x: pointInImage.x - 10, y: pointInImage.y + 10 }
-          ]
-        };
-        state.annotations.push(annotation);
-        state.selectedId = annotation.id;
-        render();
-        save();
-        setStatus("Comment added");
-      }
+      pendingCommentPoint = pointInImage;
+      render();
+      
+      const screenPoint = {
+        x: imageBox.x + pendingCommentPoint.x * imageBox.scale,
+        y: imageBox.y + pendingCommentPoint.y * imageBox.scale
+      };
+      
+      commentOverlay.style.left = `${screenPoint.x + 15}px`;
+      commentOverlay.style.top = `${screenPoint.y - 15}px`;
+      commentOverlay.classList.remove("is-hidden");
+      commentOverlayInput.value = "";
+      commentOverlayInput.focus();
       return;
     }
 
@@ -2335,7 +2389,8 @@ async function loadWorkspaceTasks() {
       }));
       
       if (state.gallery.length > 0) {
-        switchImage(0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        updateGalleryUI();
       } else {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         updateGalleryUI();
